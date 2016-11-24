@@ -218,17 +218,17 @@ function last_check(db)
     size(q, 1) > 0 ? DateTime(get(q[1, 1]), db_date_format) : "N/A"
 end
 
-function daemon(db_file = "pop2exchange.sqlite", log_file)
+using HttpServer
+
+function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Exchange.log")
     info("open database `$(db_file)`")
     db = SQLite.DB(db_file)
 
     info("starting parser")
     @async while true
-        entries = update_database("/media/logs/Pop2Exchange.log", db)
+        entries = update_database(log_file, db)
         sleep(60)
     end
-
-    using HttpServer
 
     http = HttpHandler() do req::Request, res::Response
         # build a response
