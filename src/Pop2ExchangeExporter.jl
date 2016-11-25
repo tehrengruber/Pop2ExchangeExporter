@@ -249,9 +249,9 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
         # TYPE pop2exchange_recieved_mails counter
         pop2exchange_recieved_mail_total $(recieved_mails_total(db))
         # TYPE pop2exchange_last_error gauge
-        pop2exchange_last_error $(round(Int, (now()-last_error(db)).value/1000))
+        pop2exchange_last_error $(last_error(db)=="N/A" ? -1 : round(Int, (now()-last_error(db)).value/1000))
         # TYPE pop2exchange_last_check gauge
-        pop2exchange_last_check $(round(Int, (now()-last_check(db)).value/1000))
+        pop2exchange_last_check $(last_check(db)=="N/A" ? -1 : round(Int, (now()-last_check(db)).value/1000))
         """
         resp = Response(200, Dict{AbstractString, AbstractString}("Content-Type" => "text/plain"), resp_text)
         Response( ismatch(r"^/metrics(/)*",req.resource) ? resp : 404 )
