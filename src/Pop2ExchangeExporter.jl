@@ -205,10 +205,7 @@ function update_database(log_file, db="pop2exchange.sqlite")
 			SQLite.bind!(insert, 3, log_entry.mail_count)
 			SQLite.bind!(insert, 4, log_entry.msg)
 			SQLite.execute!(insert)
-            if length%1000==0
-                unlock(db_lock)
-                yield()
-                lock(db_lock)
+            if length%10000==0
                 println("current length: ", length)
             end
 			length +=1
