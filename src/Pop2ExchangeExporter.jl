@@ -252,7 +252,7 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
         pop2exchange_last_check $(round(Int, (now()-last_check(db)).value/1000))
         """
         resp = Response(200, Dict{AbstractString, AbstractString}("Content-Type" => "text/plain"), resp_text)
-        Response( ismatch(r"^/metrics/",req.resource) ? resp : 404 )
+        Response( ismatch(r"^/metrics(/)*",req.resource) ? resp : 404 )
     end
 
     server = Server( http )
