@@ -93,6 +93,7 @@ has been parsed it is given to the cosumer by a call to produce
     end
     # read log file and group entries
     open(file) do s
+        pos=0
 		# seek to the beginning of the unparsed part of the log file
 		if offset != 0
 			seek(s, offset)
@@ -108,14 +109,15 @@ has been parsed it is given to the cosumer by a call to produce
                     entry=[]
                 else 
                     push!(entry, line) # current line belongs to the current entry
+                    pos=position(s)
                 end
             end
         end
         # process remaining data
-        if length(entry) != 0
-            produce(strip(join(entry)))
-        end
-		position(s)
+        #if length(entry) != 0
+        #    produce(strip(join(entry)))
+        #end
+		pos
     end
 end
 
