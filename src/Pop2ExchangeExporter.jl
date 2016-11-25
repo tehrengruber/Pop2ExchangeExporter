@@ -93,7 +93,7 @@ has been parsed it is given to the cosumer by a call to produce
     end
     # read log file and group entries
     open(file) do s
-        pos=0
+        pos=offset
 		# seek to the beginning of the unparsed part of the log file
 		if offset != 0
 			seek(s, offset)
