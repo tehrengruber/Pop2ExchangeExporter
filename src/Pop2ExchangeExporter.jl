@@ -86,6 +86,11 @@ has been parsed it is given to the cosumer by a call to produce
 @production function raw_log_entry_production(file::String, offset=0)
     # all entries are stored in this array
     local entry=[]
+    # check offset
+    if filesize(file)<offset
+        warn("Log file was smaller then the given offset. Reading from the beginning.")
+        offset=0
+    end
     # read log file and group entries
     open(file) do s
 		# seek to the beginning of the unparsed part of the log file
