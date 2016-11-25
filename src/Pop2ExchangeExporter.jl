@@ -187,26 +187,31 @@ function update_database(log_file, db="pop2exchange.sqlite")
     info("reading log file `$(log_file)` ($(filesize(log_file)) bytes) from offset $(offset)")
     # prepare sql statement to insert new log entries into the database
 	insert=SQLite.Stmt(db, """INSERT INTO logs (timestamp, error, mail_count, message) VALUES (?, ?, ?, ?);""")
-	# begin transaction (improves speed) and ensures a correct 
-	SQLite.execute!(db, "BEGIN TRANSACTION")
-	# read on log file
-	producer = log_entry_production(log_file, offset)
-	let length = 0
-		for log_entry in producer
-			SQLite.bind!(insert, 1, Dates.format(log_entry.timestamp, db_date_format))
-            SQLite.bind!(insert, 2, Int(log_entry.error))
-			SQLite.bind!(insert, 3, log_entry.mail_count)
-			SQLite.bind!(insert, 4, log_entry.msg)
-			SQLite.execute!(insert)
-			length +=1
-		end
-		info("successfully inserted $(length) new entries")
-	end
-	# write log file offset
-	offset = producer.result
-	SQLite.execute!(db, """UPDATE "metadata" SET "value" = $(offset) WHERE "key" = "offset" """)
-	# end transaction
-	SQLite.execute!(db, "END TRANSACTION")
+	# begin transaction (improves speed) and ensures a correct
+    try
+        SQLite.execute!(db, "BEGIN TRANSACTION")
+        # read on log file
+        producer = log_entry_production(log_file, offset)
+        let length = 0
+            for log_entry in producer
+                SQLite.bind!(insert, 1, Dates.format(log_entry.timestamp, db_date_format))
+                SQLite.bind!(insert, 2, Int(log_entry.error))
+                SQLite.bind!(insert, 3, log_entry.mail_count)
+                SQLite.bind!(insert, 4, log_entry.msg)
+                SQLite.execute!(insert)
+                length +=1
+            end
+            info("successfully inserted $(length) new entries")
+        end
+        # write log file offset
+        offset = producer.result
+        SQLite.execute!(db, """UPDATE "metadata" SET "value" = $(offset) WHERE "key" = "offset" """)
+        # end transaction
+        SQLite.execute!(db, "END TRANSACTION")
+    finally
+        warn("rollback transaction")
+        SQLite.execute!(db, "ROLLBACK TRANSACTION")
+    end
     # print some information
     info("total number of recieved mails: ", recieved_mails_total(db))
     try info("last error: ", time_difference_in_days(now(), last_error(db)), " days ago") end
