@@ -1,3 +1,5 @@
+module Pop2ExchangeExporter
+
 """
 does the given line delimit a log entry
 """
@@ -24,13 +26,13 @@ parse a log entry given as a string into a LogEntry object
 """
 function parse_log_entry{T <: Union{DateTime, Void}}(raw_entry::String, timestamp_hint::T = nothing)
     # get timestamp
-    timestamp = let m = match(r"check at local time: ([^\n\r]+)"i, raw_entry)
+    timestamp = let m = match(r"check at( local time)*: ([^\n\r]+)"i, raw_entry)
         # if not timestamp was found use the one from the last entry
         if m == nothing
             @assert timestamp_hint != nothing "log entry had no timestamp and no previous entry was given to deduce one"
             timestamp_hint
         else
-            DateTime(m[1], log_date_format)
+            DateTime(m[2], log_date_format)
         end
     end::DateTime
 
@@ -104,6 +106,10 @@ has been parsed it is given to the cosumer by a call to produce
                 end
             end
         end
+        # process remaining data
+        if length(entry) != 0
+            produce(strip(join(entry)))
+        end
 		position(s)
     end
 end
@@ -114,16 +120,14 @@ read log file and parse entries into LogEntry objects
 @production function log_entry_production(args...)
     # obtain producer responsible for reading the log file and grouping by entries
     production = raw_log_entry_production(args...)
-    # get the first log entry
-    # we need this to give a hint for the timestamp
-	if !done(production, start(production))
-		let last_log_entry = parse_log_entry(consume(production))
-			# parse first log entry and pass it to the next consumer
-			produce(last_log_entry)
-			# parse & pass all remaining log entries
-			for log_entry in production
-				produce(parse_log_entry(log_entry, last_log_entry.timestamp))
-			end
+	schedule(production)
+	yield()
+	if !istaskdone(production)
+		last_entry = parse_log_entry(first(production))
+		produce(last_entry)
+		for entry in production
+			last_entry = parse_log_entry(entry, last_entry.timestamp)
+			produce(last_entry)
 		end
 	end
 	offset = production.result
@@ -136,7 +140,8 @@ open the log database and insert all entries from the log file that
 have not been parsed yet
 """
 function update_database(log_file, db="pop2exchange.sqlite")
-    tic()
+    log_file = abspath(log_file) # make paths absolute
+    tic() # start timing
     info("started database update")
     # open the database
     if isa(db,  SQLite.DB)
@@ -145,7 +150,7 @@ function update_database(log_file, db="pop2exchange.sqlite")
         info("open database `$(db)`")
         db = SQLite.DB(db)
     end
-        # check wether the log table exists
+    # check wether the log table exists
     SQLite.execute!(db, """CREATE TABLE IF NOT EXISTS "logs"
 	  (
 		 "id"          INTEGER PRIMARY KEY NOT NULL UNIQUE,
@@ -172,7 +177,7 @@ function update_database(log_file, db="pop2exchange.sqlite")
 			offset = get(query[1, 1])
 		end
 	end
-	info("reading log file `$(log_file)` from offset $(offset)")
+    info("reading log file `$(log_file)` ($(filesize(log_file)) bytes) from offset $(offset)")
     # prepare sql statement to insert new log entries into the database
 	insert=SQLite.Stmt(db, """INSERT INTO logs (timestamp, error, mail_count, message) VALUES (?, ?, ?, ?);""")
 	# begin transaction (improves speed) and ensures a correct 
@@ -197,15 +202,16 @@ function update_database(log_file, db="pop2exchange.sqlite")
 	SQLite.execute!(db, "END TRANSACTION")
     # print some information
     info("total number of recieved mails: ", recieved_mails_total(db))
-    info("last error: ", time_difference_in_days(now(), last_error(db)), " days ago")
-    info("last check: ", round(Int, (now()-last_check(db)).value/1000/60), " minutes ago")
+    try info("last error: ", time_difference_in_days(now(), last_error(db)), " days ago") end
+    try info("last check: ", round(Int, (now()-last_check(db)).value/1000/60), " minutes ago") end
     info("elapsed time: ", round(toq(), 2), " seconds")
     info("finished database update")
     println()
 end
 
 function recieved_mails_total(db)
-    get(SQLite.query(db, "SELECT SUM(mail_count) FROM logs")[1, 1])
+    q = SQLite.query(db, "SELECT SUM(mail_count) FROM logs")[1, 1]
+    isnull(q) ? 0 : get(q)
 end
 
 function last_error(db)
@@ -245,3 +251,5 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
     server = Server( http )
     run( server, 8000 )
 end
+
+end # end module
