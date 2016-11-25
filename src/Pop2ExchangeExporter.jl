@@ -106,10 +106,10 @@ has been parsed it is given to the cosumer by a call to produce
                         continue
                      end
 					produce(strip(join(entry))) # produce entry
+                    pos=position(s)
                     entry=[]
                 else 
                     push!(entry, line) # current line belongs to the current entry
-                    pos=position(s)
                 end
             end
         end
@@ -130,12 +130,20 @@ read log file and parse entries into LogEntry objects
 	schedule(production)
 	yield()
 	if !istaskdone(production)
-		last_entry = parse_log_entry(first(production))
-		produce(last_entry)
-		for entry in production
-			last_entry = parse_log_entry(entry, last_entry.timestamp)
-			produce(last_entry)
-		end
+        try
+            last_entry = parse_log_entry(first(production))
+            produce(last_entry)
+            for entry in production
+                last_entry = parse_log_entry(entry, last_entry.timestamp)
+                produce(last_entry)
+            end
+        catch e
+            println(e)
+            println("stacktrace: ")
+            display(stacktrace(catch_backtrace()))
+            println("task: ", production)
+            println("task result:", production.result)
+        end
 	end
 	offset = production.result
 end
@@ -215,8 +223,8 @@ function update_database(log_file, db="pop2exchange.sqlite")
     end
     # print some information
     info("total number of recieved mails: ", recieved_mails_total(db))
-    try info("last error: ", time_difference_in_days(now(), last_error(db)), " days ago") end
-    try info("last check: ", round(Int, (now()-last_check(db)).value/1000/60), " minutes ago") end
+    try info("last error: $(last_error(db)) ($(time_difference_in_days(now(), last_error(db))) days ago)") end
+    try info("last check: $(last_check(db)) ($(round(Int, (now()-last_check(db)).value/1000/60)) minutes ago)") end
     info("elapsed time: ", round(toq(), 2), " seconds")
     info("finished database update")
     println()
@@ -249,6 +257,7 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
             entries = update_database(log_file, db)
         catch e
             warn("error during update: ", e)
+            display(stacktrace(catch_backtrace()))
         end
         sleep(60)
     end
