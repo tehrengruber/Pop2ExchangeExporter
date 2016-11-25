@@ -208,9 +208,10 @@ function update_database(log_file, db="pop2exchange.sqlite")
         SQLite.execute!(db, """UPDATE "metadata" SET "value" = $(offset) WHERE "key" = "offset" """)
         # end transaction
         SQLite.execute!(db, "END TRANSACTION")
-    finally
+    catch e
         warn("rollback transaction")
         SQLite.execute!(db, "ROLLBACK TRANSACTION")
+        rethrow(e)
     end
     # print some information
     info("total number of recieved mails: ", recieved_mails_total(db))
