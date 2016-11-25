@@ -239,7 +239,11 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
 
     info("starting parser")
     @async while true
-        entries = update_database(log_file, db)
+        try
+            entries = update_database(log_file, db)
+        catch e
+            warn("error during update: ", e)
+        end
         sleep(60)
     end
 
