@@ -22,6 +22,11 @@ const log_date_format = Dates.DateFormat("d.m.y H:M:S")
 const db_date_format = Dates.DateFormat("YYYY-mm-dd HH:MM:SS")
 
 """
+database lock (fixes: `write: broken pipe (EPIPE)`)
+"""
+const db_lock = ReentrantLock()
+
+"""
 parse a log entry given as a string into a LogEntry object
 """
 function parse_log_entry{T <: Union{DateTime, Void}}(raw_entry::String, timestamp_hint::T = nothing)
@@ -149,6 +154,8 @@ have not been parsed yet
 function update_database(log_file, db="pop2exchange.sqlite")
     log_file = abspath(log_file) # make paths absolute
     tic() # start timing
+    info("aquires database lock")
+    lock(db_lock) # lock database
     info("started database update")
     # open the database
     if isa(db,  SQLite.DB)
@@ -198,6 +205,9 @@ function update_database(log_file, db="pop2exchange.sqlite")
 			SQLite.bind!(insert, 3, log_entry.mail_count)
 			SQLite.bind!(insert, 4, log_entry.msg)
 			SQLite.execute!(insert)
+            if length%10000==0
+                println("current length: ", length)
+            end
 			length +=1
 		end
 		info("successfully inserted $(length) new entries")
@@ -213,6 +223,7 @@ function update_database(log_file, db="pop2exchange.sqlite")
     try info("last check: ", round(Int, (now()-last_check(db)).value/1000/60), " minutes ago") end
     info("elapsed time: ", round(toq(), 2), " seconds")
     info("finished database update")
+    unlock(db_lock)
     println()
 end
 
@@ -248,6 +259,8 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
     end
 
     http = HttpHandler() do req::Request, res::Response
+        println("locked? ", islocked(db_lock))
+        lock(db_lock)
         # build a response
         resp_text = """
         # TYPE pop2exchange_recieved_mails counter
@@ -258,6 +271,7 @@ function daemon(db_file = "pop2exchange.sqlite", log_file="/media/logs/Pop2Excha
         pop2exchange_last_check $(last_check(db)=="N/A" ? -1 : round(Int, (now()-last_check(db)).value/1000))
         """
         resp = Response(200, Dict{AbstractString, AbstractString}("Content-Type" => "text/plain"), resp_text)
+        unlock(db_lock)
         Response( ismatch(r"^/metrics(/)*",req.resource) ? resp : 404 )
     end
 
